@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>MFPO — LLD Block Diagram</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0d0d1a;font-family:'Segoe UI',sans-serif;color:#e2e8f0;padding:20px;}
+
+/* ── Title & Legend ── */
+.top{text-align:center;margin-bottom:18px;}
+.top h1{font-size:18px;font-weight:700;color:#fff;margin-bottom:8px;}
+.legend{display:inline-flex;gap:14px;background:#1a1a30;border:1px solid #2d2d50;border-radius:20px;padding:7px 18px;font-size:12px;}
+.leg{display:flex;align-items:center;gap:6px;font-weight:600;}
+.dot{width:12px;height:12px;border-radius:50%;}
+
+/* ── Main diagram wrapper ── */
+.diagram{display:flex;min-width:1300px;gap:0;}
+
+/* ── Left: Layer labels ── */
+.layers{display:flex;flex-direction:column;width:140px;min-width:140px;gap:0;}
+.layer-label{
+  display:flex;align-items:center;justify-content:center;
+  border-radius:8px 0 0 8px;
+  padding:10px 8px;text-align:center;font-size:12px;font-weight:700;
+  line-height:1.4;writing-mode:horizontal-tb;
+}
+
+/* ── Right: Component areas ── */
+.content{flex:1;display:flex;flex-direction:column;gap:0;}
+.layer-band{
+  border-radius:0 8px 8px 0;border-left:none;
+  padding:14px 16px;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+
+/* ── Component boxes ── */
+.box{
+  border-radius:8px;border:1.5px solid;padding:10px 12px;
+  display:flex;flex-direction:column;gap:4px;
+  min-width:160px;
+}
+.box .bname{font-size:12.5px;font-weight:700;margin-bottom:2px;}
+.box .bfile{font-size:9px;opacity:.7;font-style:italic;}
+.box .bdesc{font-size:10px;line-height:1.5;color:#ccd6f6;}
+.box .btag{display:inline-block;border-radius:10px;padding:1px 7px;font-size:9px;font-weight:600;margin-top:3px;}
+
+/* ── Colour themes ── */
+.infra  {background:#071a30;border-color:#0891b2;} .infra .bname{color:#38bdf8;}
+.traffic{background:#0f0a28;border-color:#6d28d9;} .traffic .bname{color:#c4b5fd;}
+.auth   {background:#1a1040;border-color:#7c3aed;} .auth .bname{color:#d8b4fe;}
+.client {background:#0f2040;border-color:#2563eb;} .client .bname{color:#60a5fa;}
+.advisor{background:#052e16;border-color:#15803d;} .advisor .bname{color:#4ade80;}
+.admin  {background:#1c0a00;border-color:#c2410c;} .admin .bname{color:#fb923c;}
+.engine {background:#2a0a30;border-color:#a21caf;} .engine .bname{color:#e879f9;}
+.sched  {background:#1a1040;border-color:#6366f1;} .sched .bname{color:#a5b4fc;}
+.notif  {background:#1a0a2e;border-color:#9333ea;} .notif .bname{color:#c084fc;}
+.data   {background:#0e1040;border-color:#4338ca;} .data .bname{color:#a5b4fc;}
+.ext    {background:#042f2e;border-color:#0f766e;} .ext .bname{color:#2dd4bf;}
+
+/* ── Layer label themes ── */
+.ll-infra  {background:#0c2030;border:2px solid #0891b2;color:#38bdf8;min-height:120px;}
+.ll-traffic{background:#1a1040;border:2px solid #6d28d9;color:#c4b5fd;min-height:110px;}
+.ll-service{background:#0a1a0a;border:2px solid #15803d;color:#4ade80;min-height:310px;}
+.ll-data   {background:#0e1040;border:2px solid #4338ca;color:#a5b4fc;min-height:130px;}
+.ll-ext    {background:#042f2e;border:2px solid #0f766e;color:#2dd4bf;min-height:110px;}
+
+.lb-infra  {background:#0c2030;border:2px solid #0891b2;border-left:2px solid #0891b2;}
+.lb-traffic{background:#0f0a28;border:2px solid #6d28d9;border-left:2px solid #6d28d9;}
+.lb-service{background:#0a1208;border:2px solid #15803d;border-left:2px solid #15803d;}
+.lb-data   {background:#0a0e30;border:2px solid #4338ca;border-left:2px solid #4338ca;}
+.lb-ext    {background:#041a18;border:2px solid #0f766e;border-left:2px solid #0f766e;}
+
+/* ── Arrows section ── */
+.arrows-section{margin-top:24px;}
+.arrows-section h2{font-size:13px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;text-align:center;}
+
+/* ── Role flow cards ── */
+.flows{display:flex;gap:14px;flex-wrap:wrap;}
+.flow-card{flex:1;min-width:340px;border-radius:10px;border:1.5px solid;padding:14px 16px;}
+.flow-card h3{font-size:12.5px;font-weight:700;margin-bottom:10px;}
+.step-list{display:flex;flex-direction:column;gap:6px;}
+.step{display:flex;align-items:flex-start;gap:8px;}
+.step-badge{
+  min-width:26px;height:22px;border-radius:11px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;flex-shrink:0;margin-top:1px;
+}
+.step-text{font-size:10.5px;line-height:1.55;color:#cbd5e1;}
+.step-text strong{color:#e2e8f0;}
+.step-arrow{
+  display:flex;align-items:center;gap:6px;padding-left:34px;
+  font-size:9px;color:#64748b;font-style:italic;margin-top:1px;
+}
+.step-arrow::before{content:"↓"; font-size:10px;}
+
+.fc-client {background:#0a1828;border-color:#2563eb;} .fc-client h3{color:#60a5fa;}
+.fc-advisor{background:#041208;border-color:#15803d;} .fc-advisor h3{color:#4ade80;}
+.fc-admin  {background:#120800;border-color:#c2410c;} .fc-admin  h3{color:#fb923c;}
+
+.sb-c{background:#1d4ed8;color:#fff;}
+.sb-v{background:#15803d;color:#fff;}
+.sb-a{background:#c2410c;color:#fff;}
+
+/* ── Interaction arrows between roles ── */
+.interactions{margin-top:18px;background:#111827;border:1px solid #1f2937;border-radius:8px;padding:14px 18px;}
+.interactions h2{font-size:12px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;}
+.int-row{display:flex;align-items:center;gap:10px;margin:5px 0;font-size:10.5px;}
+.int-from{padding:2px 10px;border-radius:4px;font-weight:600;font-size:10px;}
+.int-arrow{color:#64748b;font-size:12px;}
+.int-to  {padding:2px 10px;border-radius:4px;font-weight:600;font-size:10px;}
+.int-label{color:#94a3b8;}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>MF Purchase Optimizer (MFPO) — LLD Block Diagram</h1>
+  <div class="legend">
+    <div class="leg"><div class="dot" style="background:#3b82f6"></div><span style="color:#60a5fa">Client (Investor)</span></div>
+    <div class="leg"><div class="dot" style="background:#22c55e"></div><span style="color:#4ade80">Advisor</span></div>
+    <div class="leg"><div class="dot" style="background:#f97316"></div><span style="color:#fb923c">Admin</span></div>
+    <div class="leg"><div class="dot" style="background:#a855f7"></div><span style="color:#c084fc">Shared / All Roles</span></div>
+  </div>
+</div>
+
+<!-- ══════════════ MAIN LAYERED DIAGRAM ══════════════ -->
+<div class="diagram">
+
+  <!-- Left: Layer Labels -->
+  <div class="layers">
+    <div class="layer-label ll-infra">🏗<br/>INFRA-<br/>STRUCTURE</div>
+    <div class="layer-label ll-traffic">🚦<br/>TRAFFIC<br/>MGMT</div>
+    <div class="layer-label ll-service">⚙️<br/><br/>SERVICE<br/>LAYER<br/><br/>(FastAPI)</div>
+    <div class="layer-label ll-data">🗄<br/>DATA<br/>LAYER</div>
+    <div class="layer-label ll-ext">🌐<br/>EXTERNAL<br/>SERVICES</div>
+  </div>
+
+  <!-- Right: Component content -->
+  <div class="content">
+
+    <!-- ── INFRASTRUCTURE ── -->
+    <div class="layer-band lb-infra">
+
+      <div class="box infra">
+        <div class="bname">👤 Client</div>
+        <div class="bfile">Browser</div>
+        <div class="bdesc">Registers · Invests<br/>Tracks portfolio</div>
+      </div>
+
+      <div class="box advisor">
+        <div class="bname">🤝 Advisor</div>
+        <div class="bfile">Browser</div>
+        <div class="bdesc">Reviews clients<br/>Approves orders</div>
+      </div>
+
+      <div class="box admin">
+        <div class="bname">🛡️ Admin</div>
+        <div class="bfile">Browser</div>
+        <div class="bdesc">Manages system<br/>Funds · Ingestion</div>
+      </div>
+
+      <div style="color:#334155;font-size:22px;align-self:center;margin:0 4px;">→</div>
+
+      <div class="box infra" style="min-width:230px;">
+        <div class="bname">React SPA (Vite + React)</div>
+        <div class="bfile">Frontend · NGINX port 3001</div>
+        <div class="bdesc">
+          🔵 <span style="color:#93c5fd">/client-dashboard</span> (Portfolio · Recs · History)<br/>
+          🟢 <span style="color:#86efac">/advisor-dashboard</span> (Clients · Orders)<br/>
+          🟠 <span style="color:#fed7aa">/admin-dashboard</span> (Stats · Funds · Ingest)
+        </div>
+        <span class="btag" style="background:#1e3a5f;color:#7dd3fc;">AuthContext · Axios JWT Interceptor</span>
+      </div>
+
+      <div style="color:#334155;font-size:22px;align-self:center;margin:0 4px;">→</div>
+
+      <div class="box infra">
+        <div class="bname">Docker + CI/CD</div>
+        <div class="bfile">docker-compose.yml · GitHub Actions</div>
+        <div class="bdesc">backend:8000 · frontend:3001<br/>Build → Test → Deploy pipeline</div>
+      </div>
+
+    </div>
+
+    <!-- ── TRAFFIC MANAGEMENT ── -->
+    <div class="layer-band lb-traffic" style="gap:16px;">
+
+      <div class="box traffic" style="min-width:200px;">
+        <div class="bname">NGINX Reverse Proxy</div>
+        <div class="bfile">Edge · port 3001 → 80</div>
+        <div class="bdesc">Serves React build<br/>Routes <code style="color:#c4b5fd">/api/*</code> → FastAPI:8000</div>
+      </div>
+
+      <div style="color:#6d28d9;font-size:22px;align-self:center;">→</div>
+
+      <div class="box traffic" style="min-width:200px;">
+        <div class="bname">API Gateway</div>
+        <div class="bfile">main.py · CORS middleware</div>
+        <div class="bdesc">All HTTPS requests enter here<br/>CORS for frontend origin</div>
+      </div>
+
+      <div style="color:#6d28d9;font-size:22px;align-self:center;">→</div>
+
+      <div class="box auth" style="min-width:200px;">
+        <div class="bname">JWT Verification</div>
+        <div class="bfile">security.py · dependencies.py</div>
+        <div class="bdesc">Bearer token decoded<br/><code style="color:#d8b4fe">get_current_user()</code> injected<br/>Access: 30 min · Refresh: 7 days</div>
+      </div>
+
+      <div style="color:#6d28d9;font-size:22px;align-self:center;">→</div>
+
+      <div class="box auth" style="min-width:200px;">
+        <div class="bname">Role Guard</div>
+        <div class="bfile">roles.py · crypto.py</div>
+        <div class="bdesc">
+          🔵 <code style="color:#93c5fd">role == "investor"</code><br/>
+          🟢 <code style="color:#86efac">role in advisor|admin</code><br/>
+          🟠 <code style="color:#fed7aa">role == "admin"</code>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── SERVICE LAYER ── -->
+    <div class="layer-band lb-service" style="flex-direction:column;gap:10px;align-items:stretch;">
+
+      <!-- Row 1: Main API Services -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+
+        <div class="box auth" style="flex:1;min-width:170px;">
+          <div class="bname">🔐 Auth Service</div>
+          <div class="bfile">auth.py · otp.py</div>
+          <div class="bdesc">
+            Register → OTP email verify<br/>
+            Login → OTP → JWT tokens<br/>
+            Refresh token rotation<br/>
+            Change password · Logout
+          </div>
+          <span class="btag" style="background:#4c1d95;color:#e9d5ff;">All roles use auth</span>
+        </div>
+
+        <div class="box client" style="flex:1.2;min-width:190px;">
+          <div class="bname">💼 Investor Service</div>
+          <div class="bfile">investor.py</div>
+          <div class="bdesc">
+            Profile setup (Q1–Q4, income, age)<br/>
+            Place investment → PENDING<br/>
+            View portfolio (APPROVED only)<br/>
+            View history (all statuses)<br/>
+            Pending orders list
+          </div>
+          <span class="btag" style="background:#1e3a5f;color:#7dd3fc;">🔵 Client only</span>
+        </div>
+
+        <div class="box advisor" style="flex:1.2;min-width:190px;">
+          <div class="bname">🤝 Advisor Service</div>
+          <div class="bfile">advisor.py</div>
+          <div class="bdesc">
+            View all investor clients<br/>
+            Client portfolio and profile<br/>
+            Get recommendations for client<br/>
+            View orders (PENDING first)<br/>
+            Approve / Reject orders
+          </div>
+          <span class="btag" style="background:#14532d;color:#86efac;">🟢 Advisor only</span>
+        </div>
+
+        <div class="box admin" style="flex:1.2;min-width:190px;">
+          <div class="bname">🛡️ Admin Service</div>
+          <div class="bfile">admin.py</div>
+          <div class="bdesc">
+            System stats (users, funds)<br/>
+            User management<br/>
+            Fund CRUD (add/update/deactivate)<br/>
+            Trigger NAV &amp; metrics ingest<br/>
+            Approved orders audit log
+          </div>
+          <span class="btag" style="background:#7c2d12;color:#fed7aa;">🟠 Admin only</span>
+        </div>
+
+        <div class="box notif" style="flex:1;min-width:160px;">
+          <div class="bname">📧 Notification</div>
+          <div class="bfile">email_service.py</div>
+          <div class="bdesc">
+            OTP emails<br/>
+            Order placed → advisor<br/>
+            Approved/Rejected → investor<br/>
+            Runs as BackgroundTask
+          </div>
+          <span class="btag" style="background:#4a044e;color:#f0abfc;">All roles</span>
+        </div>
+
+        <div class="box ext" style="flex:1;min-width:160px;">
+          <div class="bname">📊 Fund Catalogue</div>
+          <div class="bfile">funds.py</div>
+          <div class="bdesc">
+            Active funds list<br/>
+            Fund details + metrics<br/>
+            NAV history lookup
+          </div>
+          <span class="btag" style="background:#042f2e;color:#5eead4;">Client + Advisor</span>
+        </div>
+
+      </div>
+
+      <!-- Divider -->
+      <div style="border-top:1px dashed #1f2937;margin:2px 0;"></div>
+
+      <!-- Row 2: Engines and Support -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+
+        <div class="box engine" style="flex:1.3;min-width:220px;">
+          <div class="bname">⚖️ Risk Score Engine</div>
+          <div class="bfile">User_Risk_Score_Engine.py</div>
+          <div class="bdesc">
+            Stated Risk = avg(Q1–Q4) ÷ 3<br/>
+            Risk Capacity = Age + Income + Duration<br/>
+            <strong>New user:</strong> 50% Stated + 50% Capacity<br/>
+            <strong>Returning:</strong> blends revealed behaviour<br/>
+            → <em>final_risk_score</em> → Low / Moderate / High
+          </div>
+        </div>
+
+        <div class="box engine" style="flex:1.5;min-width:260px;">
+          <div class="bname">🎯 Recommendation Engine</div>
+          <div class="bfile">recommendations.py</div>
+          <div class="bdesc">
+            Filter funds: <code style="color:#f0abfc">|FRS − user_score| ≤ 0.30</code><br/>
+            Score = <code style="color:#f0abfc">0.5×FQS − 0.3×RiskMismatch + 0.2×DurationFit</code><br/>
+            Basket size: ₹≤20L→4 funds … &gt;5Cr→8 funds<br/>
+            Waterfall allocation: max 25% per fund<br/>
+            Expected return: <code style="color:#f0abfc">FV = amount × (1+CAGR)^years</code>
+          </div>
+        </div>
+
+        <div class="box sched" style="flex:1.2;min-width:200px;">
+          <div class="bname">⏰ APScheduler</div>
+          <div class="bfile">scheduler.py · scripts/</div>
+          <div class="bdesc">
+            Auto-runs daily at 01:00<br/>
+            Fetches NAV from mfapi.in<br/>
+            Computes FQS · FRS · CAGR · Beta<br/>
+            Manual trigger via Admin panel
+          </div>
+        </div>
+
+        <div class="box sched" style="flex:1;min-width:170px;">
+          <div class="bname">🔧 Core Modules</div>
+          <div class="bfile">core/ · services/</div>
+          <div class="bdesc">
+            JWT create &amp; verify<br/>
+            AES password decryption<br/>
+            DB session factory<br/>
+            Input validation &amp; logging
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── DATA LAYER ── -->
+    <div class="layer-band lb-data" style="gap:10px;flex-wrap:wrap;">
+
+      <div class="box data" style="flex:1;min-width:150px;">
+        <div class="bname">👥 Users &amp; Profiles</div>
+        <div class="bdesc">users · investors · advisors<br/>UUID · role · bcrypt hash<br/>risk scores · ARN · DOB</div>
+      </div>
+
+      <div class="box data" style="flex:1;min-width:150px;">
+        <div class="bname">📈 Mutual Funds</div>
+        <div class="bdesc">mutual_funds · fund_metrics<br/>scheme_code · FQS · FRS<br/>CAGR · volatility · is_active</div>
+      </div>
+
+      <div class="box data" style="flex:1;min-width:150px;">
+        <div class="bname">📉 NAV History</div>
+        <div class="bdesc">nav_history<br/>scheme_code · date · nav<br/>Up to 1500 records/fund</div>
+      </div>
+
+      <div class="box data" style="flex:1.2;min-width:180px;">
+        <div class="bname">💸 Transactions</div>
+        <div class="bdesc">portfolio_transactions<br/><span style="color:#fbbf24">PENDING</span> → <span style="color:#4ade80">APPROVED</span> / <span style="color:#f87171">REJECTED</span><br/>amount · units · NAV · advisor</div>
+      </div>
+
+      <div class="box data" style="flex:1;min-width:150px;">
+        <div class="bname">🔑 OTP &amp; Tokens</div>
+        <div class="bdesc">otp (10-min TTL · used flag)<br/>token_blacklist (rotation)<br/>password_reset tokens</div>
+      </div>
+
+      <div class="box data" style="flex:1;min-width:150px;">
+        <div class="bname">📋 Reference Tables</div>
+        <div class="bdesc">benchmark_index · benchmark_history<br/>fund_ter_history<br/>client (advisor↔investor)</div>
+      </div>
+
+    </div>
+
+    <!-- ── EXTERNAL SERVICES ── -->
+    <div class="layer-band lb-ext" style="gap:14px;">
+
+      <div class="box ext" style="flex:1;">
+        <div class="bname">📨 Gmail SMTP</div>
+        <div class="bfile">TLS · port 587</div>
+        <div class="bdesc">OTP emails · login alerts<br/>Order approved / rejected emails</div>
+      </div>
+
+      <div class="box ext" style="flex:1.3;">
+        <div class="bname">🌐 mfapi.in / AMFI API</div>
+        <div class="bfile">External REST API · timeout 15s</div>
+        <div class="bdesc">Fetches fund metadata on add<br/>Daily NAV history for all active funds</div>
+      </div>
+
+      <div class="box ext" style="flex:1;">
+        <div class="bname">📁 CSV Seed Files</div>
+        <div class="bfile">scripts/ · local files</div>
+        <div class="bdesc">benchmarks.csv · TER history<br/>Loaded once at ingestion setup</div>
+      </div>
+
+    </div>
+
+  </div><!-- end .content -->
+</div><!-- end .diagram -->
+
+
+<!-- ══════════════ ROLE FLOW CARDS ══════════════ -->
+<div class="arrows-section">
+  <h2>Role-Specific Flow Steps</h2>
+  <div class="flows">
+
+    <!-- CLIENT FLOW -->
+    <div class="flow-card fc-client">
+      <h3>🔵 Client (Investor) Flow</h3>
+      <div class="step-list">
+
+        <div class="step">
+          <div class="step-badge sb-c">①</div>
+          <div class="step-text"><strong>Register</strong> — POST /auth/register<br/>AES-encrypted password · age ≥ 18 · OTP sent to email</div>
+        </div>
+        <div class="step-arrow">OTP emailed via Gmail SMTP (BackgroundTask)</div>
+
+        <div class="step">
+          <div class="step-badge sb-c">②</div>
+          <div class="step-text"><strong>Verify Email OTP</strong> — POST /auth/verify-otp<br/>10-min TTL · marks User.is_verified = True</div>
+        </div>
+        <div class="step-arrow">Account activated → redirect to login</div>
+
+        <div class="step">
+          <div class="step-badge sb-c">③</div>
+          <div class="step-text"><strong>Login + 2FA</strong> — POST /auth/login → /auth/verify-login-otp<br/>Returns JWT access token (30 min) + refresh token (7 days)</div>
+        </div>
+        <div class="step-arrow">Tokens stored in localStorage → /client-dashboard</div>
+
+        <div class="step">
+          <div class="step-badge sb-c">④</div>
+          <div class="step-text"><strong>Risk Profile Setup</strong> — PUT /investor/profile<br/>Fill Q1–Q4, annual income, investment duration</div>
+        </div>
+        <div class="step-arrow">→ Risk Score Engine calculates final_risk_score</div>
+
+        <div class="step">
+          <div class="step-badge sb-c">⑤</div>
+          <div class="step-text"><strong>Get Recommendations</strong> — POST /recommendations/<br/>Enter amount + duration → AI scores + Waterfall allocation</div>
+        </div>
+        <div class="step-arrow">Rec Engine uses Risk Engine + Fund Catalogue</div>
+
+        <div class="step">
+          <div class="step-badge sb-c">⑥</div>
+          <div class="step-text"><strong>Invest</strong> — POST /investor/invest (or /invest-all)<br/>Min amount check · units = amount ÷ latest NAV → PENDING</div>
+        </div>
+        <div class="step-arrow">Notification sends order alert email to advisor</div>
+
+        <div class="step">
+          <div class="step-badge sb-c">⑦</div>
+          <div class="step-text"><strong>Track Orders &amp; Portfolio</strong><br/>GET /investor/pending-orders · /history · /portfolio (APPROVED only)</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ADVISOR FLOW -->
+    <div class="flow-card fc-advisor">
+      <h3>🟢 Advisor Flow</h3>
+      <div class="step-list">
+
+        <div class="step">
+          <div class="step-badge sb-v">Ⓐ</div>
+          <div class="step-text"><strong>Register with ARN</strong> — POST /auth/register (role=advisor)<br/>ARN format validated · OTP email verify (same as client)</div>
+        </div>
+        <div class="step-arrow">Account activated with valid ARN number</div>
+
+        <div class="step">
+          <div class="step-badge sb-v">Ⓑ</div>
+          <div class="step-text"><strong>Login + 2FA</strong> — POST /auth/login → /auth/verify-login-otp<br/>JWT role=advisor → Guard: role in (advisor | admin)</div>
+        </div>
+        <div class="step-arrow">→ /advisor-dashboard</div>
+
+        <div class="step">
+          <div class="step-badge sb-v">Ⓒ</div>
+          <div class="step-text"><strong>View All Clients</strong> — GET /advisor/clients<br/>Returns full investor profiles: risk scores, Q answers, DOB, income</div>
+        </div>
+
+        <div class="step">
+          <div class="step-badge sb-v">Ⓓ</div>
+          <div class="step-text"><strong>View Client Portfolio</strong> — GET /advisor/clients/:id/portfolio<br/>Sees ALL transactions including PENDING and REJECTED</div>
+        </div>
+
+        <div class="step">
+          <div class="step-badge sb-v">Ⓔ</div>
+          <div class="step-text"><strong>Review Orders</strong> — GET /advisor/orders (PENDING first)<br/>See: client name · fund · amount · AI recommendation reason</div>
+        </div>
+
+        <div class="step">
+          <div class="step-badge sb-v">Ⓕ</div>
+          <div class="step-text"><strong>Approve Order</strong> — POST /advisor/orders/:id/approve<br/>Status → APPROVED · 2 emails sent (investor + advisor)</div>
+        </div>
+
+        <div class="step">
+          <div class="step-badge sb-v">Ⓖ</div>
+          <div class="step-text"><strong>Reject Order</strong> — POST /advisor/orders/:id/reject<br/>Status → REJECTED · rejection reason · email sent to investor</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ADMIN FLOW -->
+    <div class="flow-card fc-admin">
+      <h3>🟠 Admin Flow</h3>
+      <div class="step-list">
+
+        <div class="step">
+          <div class="step-badge sb-a">❶</div>
+          <div class="step-text"><strong>Register</strong> — POST /auth/register-admin<br/>Requires ADMIN_SECRET env var · Auto-verified (no OTP needed)</div>
+        </div>
+        <div class="step-arrow">Account is immediately active, no email OTP</div>
+
+        <div class="step">
+          <div class="step-badge sb-a">❷</div>
+          <div class="step-text"><strong>Login + 2FA</strong> — POST /auth/login → /auth/verify-login-otp<br/>JWT role=admin → Guard: role must == "admin"</div>
+        </div>
+        <div class="step-arrow">→ /admin-dashboard</div>
+
+        <div class="step">
+          <div class="step-badge sb-a">❸</div>
+          <div class="step-text"><strong>View System Stats</strong> — GET /admin/stats<br/>Total users, investors, advisors, active funds, last NAV sync</div>
+        </div>
+
+        <div class="step">
+          <div class="step-badge sb-a">❹</div>
+          <div class="step-text"><strong>Manage Funds</strong> — GET/POST/PUT /admin/funds<br/>Add fund: auto-fetches metadata from mfapi.in<br/>Update expense ratio · category · deactivate (soft delete)</div>
+        </div>
+        <div class="step-arrow">DELETE = soft deactivate (data preserved, excluded from recs)</div>
+
+        <div class="step">
+          <div class="step-badge sb-a">❺</div>
+          <div class="step-text"><strong>Trigger NAV Ingestion</strong> — POST /admin/ingest/nav<br/>Runs ingest_mf_data.py as BackgroundTask subprocess</div>
+        </div>
+        <div class="step-arrow">Fetches daily NAV from mfapi.in → writes to nav_history table</div>
+
+        <div class="step">
+          <div class="step-badge sb-a">❻</div>
+          <div class="step-text"><strong>Trigger Metrics</strong> — POST /admin/ingest/metrics<br/>Runs compute_metrics.py → updates FQS · FRS · CAGR · Beta · Alpha</div>
+        </div>
+        <div class="step-arrow">APScheduler also runs both automatically at 01:00 daily</div>
+
+        <div class="step">
+          <div class="step-badge sb-a">❼</div>
+          <div class="step-text"><strong>Audit Orders</strong> — GET /admin/approved-orders<br/>Full audit log: client · fund · amount · approving advisor name</div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- end .flows -->
+</div>
+
+<!-- ══════════════ INTERACTIONS ══════════════ -->
+<div class="interactions">
+  <h2>⚡ Key Cross-Role Interactions</h2>
+  <div class="int-row">
+    <span class="int-from" style="background:#1d4ed8;color:#bfdbfe;">Client</span>
+    <span class="int-arrow">──→</span>
+    <span class="int-to" style="background:#15803d;color:#bbf7d0;">Advisor</span>
+    <span class="int-label">When client places an investment → Notification Service emails advisor with order details</span>
+  </div>
+  <div class="int-row">
+    <span class="int-from" style="background:#15803d;color:#bbf7d0;">Advisor</span>
+    <span class="int-arrow">──→</span>
+    <span class="int-to" style="background:#1d4ed8;color:#bfdbfe;">Client</span>
+    <span class="int-label">When advisor approves or rejects → Notification Service emails investor with status + reason</span>
+  </div>
+  <div class="int-row">
+    <span class="int-from" style="background:#c2410c;color:#fed7aa;">Admin</span>
+    <span class="int-arrow">──→</span>
+    <span class="int-to" style="background:#1d4ed8;color:#bfdbfe;">Client</span>
+    <span class="int-label">Fund deactivated by admin → excluded from future recommendations (is_active = False)</span>
+  </div>
+  <div class="int-row">
+    <span class="int-from" style="background:#c2410c;color:#fed7aa;">Admin</span>
+    <span class="int-arrow">──→</span>
+    <span class="int-to" style="background:#a21caf;color:#f0abfc;">Engines</span>
+    <span class="int-label">Admin triggers metrics recompute → Risk Engine + Rec Engine get updated FQS/FRS scores</span>
+  </div>
+</div>
+
+</body>
+</html>

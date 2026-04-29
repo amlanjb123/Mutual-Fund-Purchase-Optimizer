@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>MFPO — Role-Specific LLD Flows</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0f0f1a;font-family:'Segoe UI',Arial,sans-serif;color:#e2e8f0;min-height:100vh;}
+
+/* ── Tab bar ── */
+.tabs{display:flex;gap:0;border-bottom:2px solid #2d2d50;padding:0 24px;background:#13132a;}
+.tab{
+  padding:12px 32px;font-size:13px;font-weight:600;cursor:pointer;
+  border-bottom:3px solid transparent;margin-bottom:-2px;transition:.2s;color:#7c83a0;
+}
+.tab:hover{color:#c8cfdf;}
+.tab.client.active {border-color:#3b82f6;color:#60a5fa;}
+.tab.advisor.active{border-color:#22c55e;color:#4ade80;}
+.tab.admin.active  {border-color:#f97316;color:#fb923c;}
+
+/* ── Panels ── */
+.panel{display:none;padding:24px 32px;overflow:auto;}
+.panel.active{display:block;}
+
+.diagram-title{font-size:15px;font-weight:700;margin-bottom:18px;padding:8px 16px;
+  border-radius:6px;display:inline-block;}
+.client-t {background:#1e3a5f;color:#93c5fd;border:1px solid #3b82f6;}
+.advisor-t{background:#14532d;color:#86efac;border:1px solid #22c55e;}
+.admin-t  {background:#431407;color:#fed7aa;border:1px solid #f97316;}
+
+/* ── Flow rows ── */
+.flow{display:flex;flex-direction:column;gap:0;width:100%;}
+.step-row{display:flex;align-items:stretch;gap:0;margin:0;}
+
+/* Step number badge */
+.step-num{
+  width:32px;min-width:32px;display:flex;align-items:flex-start;justify-content:center;
+  padding-top:14px;font-size:10px;font-weight:700;color:#6b7280;
+}
+
+/* Step card */
+.step{
+  flex:1;border-radius:8px;border:1.5px solid;padding:12px 16px;
+  position:relative;margin:4px 0;
+}
+.step .step-title{font-size:12px;font-weight:700;margin-bottom:6px;}
+.step .step-body{font-size:10.5px;line-height:1.7;color:#c8cfdf;}
+.step .step-body code{
+  background:#1e2030;border-radius:3px;padding:1px 5px;
+  font-size:10px;color:#7dd3fc;font-family:monospace;
+}
+.step .step-body .success{color:#4ade80;}
+.step .step-body .warn   {color:#fbbf24;}
+.step .step-body .err    {color:#f87171;}
+.step .step-body .note   {color:#a78bfa;font-style:italic;}
+
+/* Arrow connector between steps */
+.connector{display:flex;align-items:center;padding-left:32px;gap:8px;height:20px;}
+.connector-line{flex:1;max-width:220px;border-top:1.5px dashed;opacity:.5;}
+.connector-label{font-size:9px;font-style:italic;color:#6b7280;}
+
+/* Sub-steps (decision / branching) */
+.branches{display:flex;gap:12px;flex:1;margin:4px 0;}
+.branch{flex:1;border-radius:6px;border:1px solid;padding:10px 12px;}
+.branch .b-title{font-size:10.5px;font-weight:700;margin-bottom:4px;}
+.branch .b-body {font-size:10px;line-height:1.6;color:#c8cfdf;}
+.branch .b-body code{background:#1e2030;border-radius:3px;padding:1px 4px;font-size:9.5px;color:#7dd3fc;font-family:monospace;}
+
+/* colour themes per role */
+.c-step{background:#0f2040;border-color:#1d4ed8;} .c-step .step-title{color:#60a5fa;}
+.c-branch{background:#0a1830;border-color:#1e40af;} .c-branch .b-title{color:#93c5fd;}
+.c-conn  {border-color:#1d4ed8;}
+
+.a-step{background:#0a2018;border-color:#15803d;} .a-step .step-title{color:#4ade80;}
+.a-branch{background:#071810;border-color:#166534;} .a-branch .b-title{color:#86efac;}
+.a-conn  {border-color:#15803d;}
+
+.ad-step{background:#1c0e04;border-color:#c2410c;} .ad-step .step-title{color:#fb923c;}
+.ad-branch{background:#160a04;border-color:#9a3412;} .ad-branch .b-title{color:#fed7aa;}
+.ad-conn {border-color:#c2410c;}
+
+/* Pill tags */
+.pill{
+  display:inline-block;border-radius:20px;padding:1px 8px;font-size:9px;font-weight:600;
+  margin:1px 2px;
+}
+.pill-get  {background:#0e4429;color:#22c55e;border:1px solid #16a34a;}
+.pill-post {background:#1e3a5f;color:#60a5fa;border:1px solid #2563eb;}
+.pill-put  {background:#2e2000;color:#fbbf24;border:1px solid #d97706;}
+.pill-del  {background:#3b0a0a;color:#f87171;border:1px solid #dc2626;}
+.pill-db   {background:#1e1040;color:#a78bfa;border:1px solid #7c3aed;}
+.pill-email{background:#1a0a2e;color:#c084fc;border:1px solid #9333ea;}
+.pill-guard{background:#1a1000;color:#fcd34d;border:1px solid #ca8a04;}
+
+/* Section header */
+.section-hdr{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;
+  margin:20px 0 8px 32px;opacity:.6;
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ TAB BAR ══════════════════ -->
+<div class="tabs">
+  <div class="tab client active" onclick="show('client')">👤 Client (Investor) Flow</div>
+  <div class="tab advisor"       onclick="show('advisor')">🤝 Advisor Flow</div>
+  <div class="tab admin"         onclick="show('admin')">🛡️ Admin Flow</div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     CLIENT / INVESTOR FLOW
+══════════════════════════════════════════════ -->
+<div id="client" class="panel active">
+<div class="diagram-title client-t">Client (Investor) — Full LLD Flow</div>
+
+<div class="flow">
+
+  <!-- ── REGISTRATION & VERIFICATION ── -->
+  <div class="section-hdr" style="color:#60a5fa;">① Registration &amp; Email Verification</div>
+
+  <div class="step-row">
+    <div class="step-num">1</div>
+    <div class="step c-step">
+      <div class="step-title">Signup Form Submission</div>
+      <div class="step-body">
+        Client submits: <code>first_name, last_name, email, phone, password (AES-encrypted), date_of_birth, role="investor"</code><br>
+        <span class="pill pill-post">POST</span> <code>/auth/register</code><br>
+        Backend: <code>decrypt_payload(password)</code> → validate strength (8+ chars, uppercase, digit, symbol)<br>
+        Validates <code>validate_age(date_of_birth)</code> → must be 18+<br>
+        <span class="pill pill-db">DB</span> Creates <code>User</code> record + <code>Investor</code> record with <code>date_of_birth</code><br>
+        <span class="pill pill-db">DB</span> Creates <code>OTP</code> record (10-min TTL) → <span class="pill pill-email">EMAIL</span> OTP sent via Gmail SMTP (background task)<br>
+        <span class="success">→ 201 "Registration successful. Please verify your email."</span><br>
+        <span class="note">Edge case: If email exists but unverified → resends OTP only</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="connector-line c-conn"></div><div class="connector-label">Redirected to /verify-otp page</div></div>
+
+  <div class="step-row">
+    <div class="step-num">2</div>
+    <div class="step c-step">
+      <div class="step-title">Email OTP Verification</div>
+      <div class="step-body">
+        Client enters 6-digit OTP received in email<br>
+        <span class="pill pill-post">POST</span> <code>/auth/verify-otp</code> → <code>{ email, otp }</code><br>
+        <span class="pill pill-db">DB</span> Checks <code>OTP.otp_code == submitted, OTP.used == False, OTP.expires_at > now()</code><br>
+        On success: <code>OTP.used = True, User.is_verified = True</code><br>
+        <span class="success">→ 200 "Email verified successfully"</span><br>
+        <span class="err">→ 400 if OTP invalid or expired</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LOGIN ── -->
+  <div class="section-hdr" style="color:#60a5fa;">② Two-Factor Login</div>
+
+  <div class="step-row">
+    <div class="step-num">3</div>
+    <div class="step c-step">
+      <div class="step-title">Login (Password Check + OTP Trigger)</div>
+      <div class="step-body">
+        <span class="pill pill-post">POST</span> <code>/auth/login</code> → <code>{ email, password (AES-encrypted) }</code><br>
+        Backend: <code>decrypt_payload(password)</code> → <code>verify_password()</code> against <code>bcrypt hash</code><br>
+        Checks <code>User.is_verified == True</code><br>
+        <span class="pill pill-db">DB</span> Deletes all old OTPs for this user → Creates fresh login OTP (10-min TTL)<br>
+        <span class="success">→ 200 { status: "otp_required", email }</span><br>
+        <span class="note">OTP is stored but NOT emailed yet — user must click "Resend OTP"</span><br>
+        <span class="err">→ 401 Invalid credentials | 403 Email not verified</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="connector-line c-conn"></div><div class="connector-label">Redirected to /login-otp page</div></div>
+
+  <div class="step-row">
+    <div class="step-num">4</div>
+    <div class="step c-step">
+      <div class="step-title">Resend OTP → Verify Login OTP → JWT Issued</div>
+      <div class="step-body">
+        Client clicks "Resend OTP" → <span class="pill pill-post">POST</span> <code>/auth/resend-login-otp</code> → <span class="pill pill-email">EMAIL</span> login OTP emailed<br>
+        Client submits OTP → <span class="pill pill-post">POST</span> <code>/auth/verify-login-otp</code> → <code>{ email, otp }</code><br>
+        <span class="pill pill-db">DB</span> Validates OTP (unused, not expired) → <code>OTP.used = True</code><br>
+        <span class="pill pill-email">EMAIL</span> Login notification email sent (background)<br>
+        Backend: <code>create_access_token({ user_id, role })</code> + <code>create_refresh_token()</code><br>
+        <span class="success">→ 200 { access_token, refresh_token, token_type:"bearer", public_id, role:"investor" }</span><br>
+        Frontend stores tokens in <code>localStorage</code> → navigates to <code>/client-dashboard</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RISK PROFILING ── -->
+  <div class="section-hdr" style="color:#60a5fa;">③ Risk Profile Setup</div>
+
+  <div class="step-row">
+    <div class="step-num">5</div>
+    <div class="step c-step">
+      <div class="step-title">Complete Risk Profile (RiskProfileModal)</div>
+      <div class="step-body">
+        Client fills RiskProfileModal: <code>Q1, Q2, Q3, Q4</code> (1–4 scale), <code>annual_income, duration (years), date_of_birth</code><br>
+        <span class="pill pill-put">PUT</span> <code>/investor/profile</code> → <code>InvestorUpdate</code> payload<br>
+        Backend calls <code>RiskCalculatorService.calculate_risk_profile()</code> → <code>UserRiskScoreEngine</code>:<br>
+        &nbsp;&nbsp;• <code>Stated Risk = (avg(Q1-Q4) - 1) / 3</code><br>
+        &nbsp;&nbsp;• <code>Risk Capacity = 0.4×AgeScore + 0.3×IncomeScore + 0.3×DurationScore</code><br>
+        &nbsp;&nbsp;• <strong>New User</strong>: <code>Final = 0.5×StatedRisk + 0.5×RiskCapacity</code><br>
+        &nbsp;&nbsp;• <strong>Old User</strong> (has investments): Uses <code>RevealedRisk</code> (PRE+VT+DT) with alpha decay<br>
+        <span class="pill pill-db">DB</span> Saves: <code>stated_risk_score, risk_capacity_score, final_risk_score, risk_profile label</code><br>
+        Risk profile label: <code>≤0.33 → "Low Risk" | ≤0.66 → "Moderate" | >0.66 → "High Risk"</code><br>
+        <span class="success">→ 200 InvestorResponse with all risk scores</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RECOMMENDATIONS ── -->
+  <div class="section-hdr" style="color:#60a5fa;">④ Get AI Fund Recommendations</div>
+
+  <div class="step-row">
+    <div class="step-num">6</div>
+    <div class="step c-step">
+      <div class="step-title">Request Fund Recommendations</div>
+      <div class="step-body">
+        Client enters: <code>investment_amount (₹), duration_years, risk_profile_override (optional dropdown)</code><br>
+        <span class="pill pill-post">POST</span> <code>/recommendations/</code><br>
+        <br>
+        <strong>Risk Resolution:</strong><br>
+        &nbsp;&nbsp;• If override selected: <code>UserRiskScore = 0.8×override_stated + 0.2×risk_capacity</code><br>
+        &nbsp;&nbsp;• If no override: uses <code>investor.final_risk_score</code> from DB<br>
+        <br>
+        <strong>Fund Universe Query:</strong><br>
+        <span class="pill pill-db">DB</span> <code>MutualFund JOIN FundMetrics WHERE is_active=True AND fqs IS NOT NULL AND frs IS NOT NULL</code><br>
+        <br>
+        <strong>Risk Compatibility Filter:</strong> <code>|FRS - filter_score| ≤ 0.30</code> (±30% band)<br>
+        <br>
+        <strong>Scoring per fund:</strong><br>
+        &nbsp;&nbsp;<code>FinalScore = 0.5×FQS − 0.3×|UserRisk−FRS| + 0.2×DurationFit</code><br>
+        &nbsp;&nbsp;<code>DurationFit = max(0, 1 − |UserDuration−FundIdealDuration| / FundIdealDuration)</code><br>
+        <br>
+        <strong>Basket sizing:</strong><br>
+        &nbsp;&nbsp;<code>≤₹20L → 4 funds | ≤₹1Cr → 5 funds | ≤₹5Cr → 6 funds | >₹5Cr → max(min_needed×2, 8)</code><br>
+        <br>
+        <strong>Waterfall Allocation:</strong> Iterative proportional distribution, max 25% per fund, respects <code>min_investment</code><br>
+        <strong>Expected Return:</strong> <code>FV = Allocation × (1 + CAGR)^duration</code> (uses 1Y/3Y/5Y CAGR by duration)<br>
+        <span class="success">→ 200 RecommendationResponse { items[], total_allocated, total_expected_return, explanation }</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── INVEST ── -->
+  <div class="section-hdr" style="color:#60a5fa;">⑤ Invest in Recommended Funds</div>
+
+  <div class="step-row">
+    <div class="step-num">7</div>
+    <div class="step c-step">
+      <div class="step-title">Place Investment Orders</div>
+      <div class="step-body">
+        Client clicks "Invest" on a single fund or "Invest All":<br>
+        <strong>Single fund:</strong> <span class="pill pill-post">POST</span> <code>/investor/invest</code> → <code>{ scheme_code, amount, ai_explanation }</code><br>
+        <strong>Bulk:</strong> <span class="pill pill-post">POST</span> <code>/investor/invest-all</code> → <code>{ items:[{scheme_code, amount}], ai_explanation }</code><br>
+        <br>
+        Backend checks:<br>
+        &nbsp;&nbsp;• <code>fund.min_investment</code> — rejects if amount &lt; minimum<br>
+        &nbsp;&nbsp;• Fetches <code>FundMetrics.latest_nav</code> → calculates <code>units = amount / nav</code><br>
+        <span class="pill pill-db">DB</span> Creates <code>PortfolioTransaction(status="PENDING")</code><br>
+        <span class="pill pill-email">EMAIL</span> Sends pending order notification to advisor (<code>advisors@mfpo.com</code>) — background<br>
+        Risk profile recalculated after investment (revealed risk updated)<br>
+        <span class="success">→ 200 { message, units, nav_at_purchase }</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PORTFOLIO ── -->
+  <div class="section-hdr" style="color:#60a5fa;">⑥ Portfolio &amp; Order Tracking</div>
+
+  <div class="step-row">
+    <div class="step-num">8</div>
+    <div class="step c-step">
+      <div class="step-title">View Portfolio (Approved Investments Only)</div>
+      <div class="step-body">
+        <span class="pill pill-get">GET</span> <code>/investor/portfolio</code><br>
+        <span class="pill pill-db">DB</span> Queries <code>PortfolioTransaction WHERE investor_id=me AND status="APPROVED"</code><br>
+        Aggregates by <code>scheme_code</code>: total <code>investedAmount, units, currentValue</code><br>
+        <code>currentValue = units × latest_nav</code> (live from FundMetrics)<br>
+        <code>returns = currentValue − investedAmount</code><br>
+        <span class="success">→ 200 list[PortfolioItemResponse]</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-num">9</div>
+    <div class="step c-step">
+      <div class="step-title">View Pending Orders &amp; Full Transaction History</div>
+      <div class="step-body">
+        <span class="pill pill-get">GET</span> <code>/investor/pending-orders</code> → Only <code>status="PENDING"</code> transactions (awaiting advisor)<br>
+        <span class="pill pill-get">GET</span> <code>/investor/history</code> → ALL transactions (PENDING + APPROVED + REJECTED), sorted by date desc<br>
+        Both include: <code>fund name, amount, units, nav_at_purchase, transaction_date, approval_date, ai_explanation</code><br>
+        <span class="note">Investor gets email notification when advisor approves or rejects an order</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SESSION ── -->
+  <div class="section-hdr" style="color:#60a5fa;">⑦ Session Management</div>
+
+  <div class="step-row">
+    <div class="step-num">10</div>
+    <div class="step c-step">
+      <div class="step-title">Token Refresh / Logout / Password Change</div>
+      <div class="step-body">
+        <strong>Auto-refresh:</strong> On <code>401</code> response → Axios interceptor: <span class="pill pill-post">POST</span> <code>/auth/refresh</code> → <code>{ refresh_token }</code><br>
+        &nbsp;&nbsp;<span class="pill pill-db">DB</span> Checks <code>TokenBlacklist</code> → blacklists old token → returns new pair (rotation)<br>
+        <br>
+        <strong>Change Password:</strong> <span class="pill pill-post">POST</span> <code>/auth/change-password</code> → <code>{ current_password, new_password }</code> (both AES-encrypted)<br>
+        &nbsp;&nbsp;Validates current password → validates new password strength → updates <code>bcrypt hash</code><br>
+        <br>
+        <strong>Logout:</strong> <span class="pill pill-post">POST</span> <code>/auth/logout</code> → <span class="pill pill-db">DB</span> blacklists refresh token → frontend clears localStorage
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     ADVISOR FLOW
+══════════════════════════════════════════════ -->
+<div id="advisor" class="panel">
+<div class="diagram-title advisor-t">Advisor — Full LLD Flow</div>
+
+<div class="flow">
+
+  <div class="section-hdr" style="color:#4ade80;">① Registration &amp; Login</div>
+
+  <div class="step-row">
+    <div class="step-num">1</div>
+    <div class="step a-step">
+      <div class="step-title">Advisor Registration (ARN Required)</div>
+      <div class="step-body">
+        <span class="pill pill-post">POST</span> <code>/auth/register</code> → <code>{ ..., role:"advisor", arn:"XX 00 00 00 000000 0" }</code><br>
+        Backend validates ARN format: regex <code>^[A-Z]{2}\s\d{2}\s\d{2}\s\d{2}\s\d{6}\s\d{1}$</code><br>
+        <span class="pill pill-db">DB</span> Creates <code>User(role="advisor")</code> + <code>Advisor(arn_number)</code> records<br>
+        <span class="pill pill-email">EMAIL</span> OTP sent for email verification<br>
+        <span class="success">→ Same OTP verify flow as investor (step 2 in client flow)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-num">2</div>
+    <div class="step a-step">
+      <div class="step-title">Two-Factor Login (same as investor)</div>
+      <div class="step-body">
+        <span class="pill pill-post">POST</span> <code>/auth/login</code> → OTP → <span class="pill pill-post">POST</span> <code>/auth/verify-login-otp</code><br>
+        JWT role payload: <code>role:"advisor"</code> → Frontend redirects to <code>/advisor-dashboard</code><br>
+        <span class="pill pill-guard">GUARD</span> All advisor endpoints: <code>_require_advisor(user)</code> checks <code>role in ("advisor", "admin")</code>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-hdr" style="color:#4ade80;">② Client Management</div>
+
+  <div class="step-row">
+    <div class="step-num">3</div>
+    <div class="step a-step">
+      <div class="step-title">View All Investor Clients</div>
+      <div class="step-body">
+        <span class="pill pill-get">GET</span> <code>/advisor/clients</code><br>
+        <span class="pill pill-db">DB</span> Queries all <code>User WHERE role="investor"</code> → joins <code>Investor</code> for each<br>
+        Returns per client: <code>id, name, email, phone, age (computed from DOB), annual_income, duration</code><br>
+        Risk data: <code>risk_profile, final_risk_score, stated_risk_score, revealed_risk_score, user_type (New/Old)</code><br>
+        Questionnaire: <code>q1, q2, q3, q4</code><br>
+        <span class="success">→ 200 { clients: [...] }</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-num">4</div>
+    <div class="step a-step">
+      <div class="step-title">View Individual Client Profile &amp; Portfolio</div>
+      <div class="step-body">
+        <strong>Profile:</strong> <span class="pill pill-get">GET</span> <code>/advisor/clients/:client_id/profile</code><br>
+        Returns full detail: <code>pan_number, date_of_birth, risk_capacity_score, all Q answers, user_type</code><br>
+        <br>
+        <strong>Portfolio:</strong> <span class="pill pill-get">GET</span> <code>/advisor/clients/:client_id/portfolio</code><br>
+        <span class="pill pill-db">DB</span> All <code>PortfolioTransaction</code> for this investor (ALL statuses — including PENDING/REJECTED)<br>
+        Aggregates by <code>scheme_code</code>: <code>investedAmount, currentValue, units, nav, returns%</code><br>
+        <span class="success">→ 200 list of holdings</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-num">5</div>
+    <div class="step a-step">
+      <div class="step-title">Generate Recommendations for a Client</div>
+      <div class="step-body">
+        <span class="pill pill-get">GET</span> <code>/advisor/clients/:client_id/recommendations?amount=100000</code><br>
+        Backend verifies <code>investor.final_risk_score IS NOT NULL</code> (must have completed profile)<br>
+        Internally calls the same <code>get_recommendations()</code> engine — proxying as the client's user<br>
+        Uses client's <code>investor.duration</code> as investment duration<br>
+        Returns full <code>RecommendationResponse</code> — same scoring as client would get<br>
+        <span class="warn">→ 400 if client has not completed risk profile survey</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-hdr" style="color:#4ade80;">③ Order Approval Workflow</div>
+
+  <div class="step-row">
+    <div class="step-num">6</div>
+    <div class="step a-step">
+      <div class="step-title">View All Orders (PENDING First)</div>
+      <div class="step-body">
+        <span class="pill pill-get">GET</span> <code>/advisor/orders</code><br>
+        <span class="pill pill-db">DB</span> All <code>PortfolioTransaction</code> sorted: <code>status DESC</code> (PENDING before APPROVED) then <code>transaction_date DESC</code><br>
+        Per order: <code>transaction_id, client_name, client_email, fund_name, scheme_code, amount</code><br>
+        Also: <code>duration, risk_profile, ai_explanation, status, transaction_date, rejection_reason</code><br>
+        <span class="success">→ 200 list[PendingOrderResponse]</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-num">7</div>
+    <div class="step a-step">
+      <div class="step-title">Approve or Reject an Order</div>
+      <div class="step-body">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:280px;">
+            <strong style="color:#4ade80;">APPROVE:</strong><br>
+            <span class="pill pill-post">POST</span> <code>/advisor/orders/:transaction_id/approve</code><br>
+            <span class="pill pill-db">DB</span> <code>tx.status = "APPROVED"</code><br>
+            <code>tx.approved_by_advisor_id = current_user.id</code><br>
+            <code>tx.approval_date = utcnow()</code><br>
+            <span class="pill pill-email">EMAIL</span> Order approved email → client (background)<br>
+            <span class="pill pill-email">EMAIL</span> Confirmation email → advisor (background)<br>
+            <span class="success">→ 200 "Order approved successfully"</span><br>
+            <span class="note">Transaction now appears in investor's /portfolio</span>
+          </div>
+          <div style="flex:1;min-width:280px;">
+            <strong style="color:#f87171;">REJECT:</strong><br>
+            <span class="pill pill-post">POST</span> <code>/advisor/orders/:transaction_id/reject</code> → <code>{ reason }</code><br>
+            <span class="pill pill-db">DB</span> <code>tx.status = "REJECTED"</code><br>
+            <code>tx.rejection_reason = payload.reason</code><br>
+            <code>tx.approved_by_advisor_id = current_user.id</code><br>
+            <span class="pill pill-email">EMAIL</span> Order rejected email with reason → client (background)<br>
+            <span class="success">→ 200 "Order rejected successfully"</span>
+          </div>
+        </div>
+        <br>
+        <span class="warn">Guard: <code>tx.status must == "PENDING"</code> — returns 400 if already processed</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-hdr" style="color:#4ade80;">④ Profile &amp; Session</div>
+  <div class="step-row">
+    <div class="step-num">8</div>
+    <div class="step a-step">
+      <div class="step-title">Profile &amp; Session Management</div>
+      <div class="step-body">
+        <span class="pill pill-get">GET</span> <code>/auth/me</code> → Returns <code>id, email, role, first_name, last_name</code><br>
+        <span class="pill pill-post">POST</span> <code>/auth/change-password</code> → AES-decrypted, strength-validated, bcrypt re-hashed<br>
+        <span class="pill pill-post">POST</span> <code>/auth/refresh</code> → token rotation via <code>TokenBlacklist</code><br>
+        <span class="pill pill-post">POST</span> <code>/auth/logout</code> → refresh token blacklisted<br>
+        <span class="note">Shared profile page (SharedProfile.jsx) allows safe public profile sharing</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     ADMIN FLOW
+══════════════════════════════════════════════ -->
+<div id="admin" class="panel">
+<div class="diagram-title admin-t">Admin — Full LLD Flow</div>
+
+<div class="flow">
+
+  <div class="section-hdr" style="color:#fb923c;">① Admin Account Setup</div>
+
+  <div class="step-row">
+    <div class="step-num">1</div>
+    <div class="step ad-step">
+      <div class="step-title">Admin Registration (Secret Key Required)</div>
+      <div class="step-body">
+        <span class="pill pill-post">POST</span> <code>/auth/register-admin</code> → <code>{ first_name, last_name, email, phone, password, admin_secret }</code><br>
+        Backend: <code>admin_secret == settings.ADMIN_SECRET</code> (env var) → <span class="err">403 if mismatch</span><br>
+        Password: AES-decrypted → strength validated<br>
+        <span class="pill pill-db">DB</span> Creates <code>User(role="admin", is_verified=True)</code> — auto-verified, no OTP needed<br>
+        <span class="success">→ 200 "Admin user created successfully"</span><br>
+        <span class="note">Admin cannot register via the public /auth/register endpoint (blocked by role check)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-num">2</div>
+    <div class="step ad-step">
+      <div class="step-title">Login (Same 2FA — OTP Still Required)</div>
+      <div class="step-body">
+        <span class="pill pill-post">POST</span> <code>/auth/login</code> → OTP → <span class="pill pill-post">POST</span> <code>/auth/verify-login-otp</code><br>
+        JWT role payload: <code>role:"admin"</code> → Frontend redirects to <code>/admin-dashboard</code><br>
+        <span class="pill pill-guard">GUARD</span> All admin endpoints: <code>_require_admin(user)</code> checks <code>user.role == "admin"</code><br>
+        <span class="note">Admin can also access advisor endpoints (advisor guard allows "admin" role)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-hdr" style="color:#fb923c;">② Dashboard Analytics</div>
+
+  <div class="step-row">
+    <div class="step-num">3</div>
+    <div class="step ad-step">
+      <div class="step-title">System Statistics Overview</div>
+      <div class="step-body">
+        <span class="pill pill-get">GET</span> <code>/admin/stats</code><br>
+        <span class="pill pill-db">DB</span> Runs aggregate queries:<br>
+        &nbsp;&nbsp;<code>COUNT(User.id)</code> → total_users, total_investors, total_advisors, total_admins<br>
+        &nbsp;&nbsp;<code>COUNT(MutualFund.id)</code> → total_funds, active_funds<br>
+        &nbsp;&nbsp;<code>MAX(MutualFund.last_synced_at)</code> → last_nav_sync timestamp<br>
+        <span class="success">→ 200 AdminStatsResponse</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-hdr" style="color:#fb923c;">③ User Management</div>
+
+  <div class="step-row">
+    <div class="step-num">4</div>
+    <div class="step ad-step">
+      <div class="step-title">List All Users with Role-Specific Data</div>
+      <div class="step-body">
+        <span class="pill pill-get">GET</span> <code>/admin/users</code><br>
+        <span class="pill pill-db">DB</span> All <code>User</code> records ordered by <code>created_at DESC</code><br>
+        Base fields: <code>public_id, email, first_name, last_name, role, is_active, is_verified, created_at</code><br>
+        <strong>Investor extras:</strong> <code>pan_number, user_type (New/Old), final_risk_score</code><br>
+        <strong>Advisor extras:</strong> <code>arn_number</code><br>
+        <span class="success">→ 200 list[AdminUserResponse]</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-hdr" style="color:#fb923c;">④ Fund Management (CRUD)</div>
+
+  <div class="step-row">
+    <div class="step-num">5</div>
+    <div class="step ad-step">
+      <div class="step-title">List All Funds (Including Inactive)</div>
+      <div class="step-body">
+        <span class="pill pill-get">GET</span> <code>/admin/funds</code><br>
+        <span class="pill pill-db">DB</span> All <code>MutualFund</code> + joins <code>FundMetrics</code> + <code>COUNT(NAVHistory)</code> per fund<br>
+        Returns: <code>scheme_code, name, fund_house, category, expense_ratio, min_investment, is_active</code><br>
+        Metrics: <code>fqs, frs, latest_nav, nav_count, last_synced_at</code>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-num">6</div>
+    <div class="step ad-step">
+      <div class="step-title">Add New Fund (Auto-fetches from mfapi.in)</div>
+      <div class="step-body">
+        <span class="pill pill-post">POST</span> <code>/admin/funds</code> → <code>{ scheme_code, expense_ratio?, min_investment?, fund_category?, benchmark_csv? }</code><br>
+        Backend: <code>GET https://api.mfapi.in/mf/{scheme_code}</code> (timeout 15s)<br>
+        Extracts: <code>scheme_name, fund_house, scheme_type, scheme_category, isin_growth</code><br>
+        Auto-infers category from name keywords: <code>liquid/overnight → "liquid" | debt/bond → "debt" | else → "equity"</code><br>
+        <span class="pill pill-db">DB</span> Creates <code>MutualFund(is_active=True, last_synced_at=now())</code><br>
+        <span class="success">→ 201 AdminFundResponse</span><br>
+        <span class="err">→ 409 if scheme_code already exists | 502 if mfapi.in unreachable</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-num">7</div>
+    <div class="step ad-step">
+      <div class="step-title">Update Fund Fields</div>
+      <div class="step-body">
+        <span class="pill pill-put">PUT</span> <code>/admin/funds/:scheme_code</code> → <code>AdminFundUpdate</code> (all optional fields)<br>
+        Updatable: <code>expense_ratio, min_investment, fund_category, benchmark_csv, is_active</code><br>
+        <code>expense_ratio</code> change → records <code>expense_ratio_updated_at = now()</code><br>
+        <code>is_active = False</code> → fund removed from recommendation universe<br>
+        <span class="success">→ 200 updated AdminFundResponse with fresh metrics + NAV count</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-num">8</div>
+    <div class="step ad-step">
+      <div class="step-title">Deactivate Fund (Soft Delete)</div>
+      <div class="step-body">
+        <span class="pill pill-del">DELETE</span> <code>/admin/funds/:scheme_code</code><br>
+        <span class="pill pill-db">DB</span> Sets <code>fund.is_active = False</code> (NOT deleted from DB — historical data preserved)<br>
+        Fund excluded from recommendations query (<code>WHERE is_active=True</code>)<br>
+        <span class="success">→ 200 { detail: "Fund deactivated", scheme_name }</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-hdr" style="color:#fb923c;">⑤ Data Ingestion Triggers</div>
+
+  <div class="step-row">
+    <div class="step-num">9</div>
+    <div class="step ad-step">
+      <div class="step-title">Trigger NAV Data Ingestion</div>
+      <div class="step-body">
+        <span class="pill pill-post">POST</span> <code>/admin/ingest/nav</code><br>
+        Runs <code>scripts/ingest_mf_data.py</code> via <code>subprocess</code> in a <code>BackgroundTask</code><br>
+        Script fetches latest NAV for all active funds from <code>mfapi.in</code> → stores in <code>nav_history</code><br>
+        Also runs <strong>automatically</strong> daily at 01:00 via <code>APScheduler</code> on startup<br>
+        <span class="success">→ 200 "NAV ingestion started in background"</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-row">
+    <div class="step-num">10</div>
+    <div class="step ad-step">
+      <div class="step-title">Trigger Fund Metrics Recomputation</div>
+      <div class="step-body">
+        <span class="pill pill-post">POST</span> <code>/admin/ingest/metrics</code><br>
+        Runs <code>scripts/compute_metrics.py</code> via <code>subprocess</code> in a <code>BackgroundTask</code><br>
+        Computes from NAV history: <code>CAGR (1Y/3Y/5Y), volatility, Sortino, Beta, Alpha, FQS, FRS, max_drawdown</code><br>
+        Updates <code>FundMetrics</code> table — these are used by the Recommendation Engine<br>
+        <span class="success">→ 200 "Metrics computation started in background"</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-hdr" style="color:#fb923c;">⑥ Order Oversight</div>
+
+  <div class="step-row">
+    <div class="step-num">11</div>
+    <div class="step ad-step">
+      <div class="step-title">View All Approved Transactions (Audit Log)</div>
+      <div class="step-body">
+        <span class="pill pill-get">GET</span> <code>/admin/approved-orders</code><br>
+        <span class="pill pill-db">DB</span> All <code>PortfolioTransaction WHERE status="APPROVED"</code> ordered by <code>transaction_date DESC</code><br>
+        Per record includes:<br>
+        &nbsp;&nbsp;<code>transaction_id, client_name, client_email, fund_name, scheme_code</code><br>
+        &nbsp;&nbsp;<code>amount, units, nav_at_purchase, transaction_date, status</code><br>
+        &nbsp;&nbsp;<code>advisor_name, advisor_email</code> (from <code>approved_by_advisor_id</code> join)<br>
+        <span class="success">→ 200 list of approved order audit records</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ════ JS ════ -->
+<script>
+function show(role){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelector('.tab.'+role).classList.add('active');
+  document.getElementById(role).classList.add('active');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+# MF Purchase Optimizer — Class Diagram
+
+```mermaid
+classDiagram
+    direction TB
+
+    class User {
+        +String id PK
+        +String public_id UK
+        +String first_name
+        +String last_name
+        +String email UK
+        +String hashed_password
+        +String role
+        +String phone_number
+        +Boolean is_active
+        +Boolean is_verified
+        +DateTime created_at
+    }
+
+    class Investor {
+        +String id PK
+        +String user_id FK
+        +Date date_of_birth
+        +Numeric annual_income
+        +String risk_profile
+        +String pan_number
+        +Integer q1
+        +Integer q2
+        +Integer q3
+        +Integer q4
+        +Numeric duration
+        +Numeric stated_risk_score
+        +Numeric risk_capacity_score
+        +Numeric revealed_risk_score
+        +Numeric final_risk_score
+        +String user_type
+    }
+
+    class Advisor {
+        +String id PK
+        +String user_id FK
+        +String arn_number
+    }
+
+    class OTP {
+        +String id PK
+        +String email
+        +String otp_code
+        +DateTime expires_at
+        +Boolean used
+        +DateTime created_at
+    }
+
+    class PasswordReset {
+        +String token PK
+        +String user_id FK
+        +DateTime expires_at
+        +Boolean used
+        +DateTime created_at
+    }
+
+    class TokenBlacklist {
+        +String token PK
+        +DateTime blacklisted_at
+    }
+
+    class MutualFund {
+        +Integer id PK
+        +Integer scheme_code UK
+        +String scheme_name
+        +String fund_house
+        +String scheme_type
+        +String scheme_category
+        +String isin_growth
+        +String isin_div_reinvestment
+        +String benchmark_csv
+        +Numeric expense_ratio
+        +DateTime expense_ratio_updated_at
+        +Numeric min_investment
+        +String fund_category
+        +Boolean is_active
+        +DateTime last_synced_at
+        +DateTime created_at
+        +DateTime updated_at
+    }
+
+    class NAVHistory {
+        +BigInteger id PK
+        +Integer scheme_code FK
+        +Date data__date
+        +Numeric data__nav
+        +DateTime created_at
+    }
+
+    class FundMetrics {
+        +Integer id PK
+        +Integer scheme_code FK UK
+        +Numeric latest_nav
+        +Numeric volatility
+        +Numeric max_drawdown
+        +Numeric cagr
+        +Numeric cagr_1y
+        +Numeric cagr_3y
+        +Numeric cagr_5y
+        +Numeric sortino
+        +Numeric beta
+        +Numeric alpha
+        +Numeric fqs
+        +Numeric frs
+        +String window_used
+        +Integer observations
+        +Date metrics_start_date
+        +Date metrics_end_date
+        +String benchmark_used
+        +Boolean is_sufficient
+        +DateTime computed_at
+    }
+
+    class PortfolioTransaction {
+        +Integer id PK
+        +String investor_id FK
+        +Integer scheme_code FK
+        +Numeric amount
+        +Numeric nav_at_purchase
+        +Numeric units
+        +DateTime transaction_date
+        +DateTime approval_date
+        +String status
+        +String ai_explanation
+        +String rejection_reason
+        +String approved_by_advisor_id FK
+        +Numeric investment_duration
+    }
+
+    %% Relationships
+    User "1" --> "0..1" Investor : has
+    User "1" --> "0..1" Advisor : has
+    User "1" --> "0..*" PasswordReset : requests
+
+    Investor "1" --> "0..*" PortfolioTransaction : places
+
+    MutualFund "1" --> "0..*" NAVHistory : has
+    MutualFund "1" --> "0..1" FundMetrics : has
+    MutualFund "1" --> "0..*" PortfolioTransaction : referenced in
+
+    Advisor "1" --> "0..*" PortfolioTransaction : approves
+```
