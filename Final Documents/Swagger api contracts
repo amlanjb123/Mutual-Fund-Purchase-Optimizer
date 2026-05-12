@@ -1,0 +1,1922 @@
+openapi: 3.0.0
+info:
+  title: Mutual Funds Purchase Interface API
+  description: |
+    API for managing mutual fund investments, user portfolios, and authentication.
+    
+    ## Authentication & User Identification
+    This API uses **JWT (JSON Web Token)** based authentication. Here's how it works:
+    
+    ### Login/Registration Flow:
+    1. User calls `/auth/login` or `/auth/register`
+    2. Backend validates credentials and creates a JWT token
+    3. **The JWT token contains the user ID encoded inside it**
+    4. Backend returns: `{ "token": "eyJhbG...", "user": {...} }`
+    
+    ### Authenticated Requests:
+    1. Client stores the JWT token (in localStorage or cookies)
+    2. For all subsequent API calls, client sends: `Authorization: Bearer <token>`
+    3. **Backend decodes the JWT token and extracts the user ID automatically**
+    4. No need to pass user ID in request body or query parameters!
+    
+    ### Example:
+    ```
+    GET /users/profile
+    Headers: 
+      Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    
+    Backend extracts user ID from token → Fetches profile for that user → Returns profile
+    ```
+    
+    ## Roles
+    - **Client**: Individual investor. Can register, invest, and view own portfolio.
+    - **Advisor**: Financial advisor. Can register, view assigned clients.
+    - **Admin**: System administrator. Full access to manage users and funds.
+  version: 1.2.0
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "user123"
+        email:
+          type: string
+          format: email
+          example: "john@example.com"
+        first_name:
+          type: string
+          example: "John"
+        last_name:
+          type: string
+          example: "Doe"
+        role:
+          type: string
+          enum: [client, admin, advisor]
+          example: "client"
+        phone:
+          type: string
+          example: "+919876543210"
+        arn:
+          type: string
+          description: AMFI Registration Number (Present only for advisors)
+          example: "ARN-123456"
+        pan:
+          type: string
+          example: "ABCDE1234F"
+        riskProfile:
+          type: string
+          enum: [Low, Moderate, High, Very High]
+          example: "Moderate"
+
+    MutualFund:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "fund001"
+        name:
+          type: string
+          example: "HDFC Equity Fund"
+        category:
+          type: string
+          enum: [Equity, Debt, Hybrid, Index, Sectoral]
+          example: "Equity"
+        nav:
+          type: number
+          example: 152.45
+        returns:
+          type: object
+          properties:
+            1Y:
+              type: number
+              example: 12.5
+            3Y:
+              type: number
+              example: 15.8
+            5Y:
+              type: number
+              example: 18.2
+        riskRating:
+          type: string
+          enum: [Low, Moderate, High, Very High]
+          example: "High"
+        minInvestment:
+          type: number
+          example: 5000
+        expenseRatio:
+          type: number
+          example: 1.25
+        aum:
+          type: string
+          example: "₹15,234 Cr"
+        fundManager:
+          type: string
+          example: "Rajesh Kumar"
+        description:
+          type: string
+          example: "A diversified equity fund focused on large-cap stocks"
+
+    PortfolioItem:
+      type: object
+      properties:
+        fundId:
+          type: string
+          example: "fund001"
+        fundName:
+          type: string
+          example: "HDFC Equity Fund"
+        units:
+          type: number
+          example: 100.5
+        investedAmount:
+          type: number
+          example: 15000
+        currentValue:
+          type: number
+          example: 15320
+        purchaseDate:
+          type: string
+          format: date
+          example: "2024-01-15"
+    
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "txn123"
+        type:
+          type: string
+          enum: [INVEST, REDEEM]
+          example: "INVEST"
+        fundName:
+          type: string
+          example: "HDFC Equity Fund"
+        amount:
+          type: number
+          example: 10000
+        date:
+          type: string
+          format: date
+          example: "2024-06-15"
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, FAILED]
+          example: "COMPLETED"
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "notif123"
+        title:
+          type: string
+          example: "Investment Successful"
+        message:
+          type: string
+          example: "Your investment of ₹10,000 has been processed"
+        date:
+          type: string
+          format: date-time
+          example: "2024-06-15T10:30:00Z"
+        read:
+          type: boolean
+          example: false
+
+    AnalyticsSummary:
+      type: object
+      properties:
+        totalInvestment:
+          type: number
+          example: 50000
+        currentValue:
+          type: number
+          example: 54200
+        totalReturns:
+          type: number
+          example: 4200
+        returnsPercentage:
+          type: number
+          example: 8.4
+        activeFunds:
+          type: integer
+          example: 5
+
+    PerformanceData:
+      type: object
+      properties:
+        month:
+          type: string
+          example: "Jan"
+        value:
+          type: number
+          example: 50000
+
+    AssetAllocation:
+      type: object
+      properties:
+        category:
+          type: string
+          example: "Equity"
+        value:
+          type: number
+          example: 30000
+        percentage:
+          type: number
+          example: 55.4
+
+paths:
+  # AUTHENTICATION (2)
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login user
+      description: |
+        Authenticates a user and returns a JWT token containing the user ID.
+        
+        **Required Parameters:**
+        - `email`: User's registered email address
+        - `password`: User's password
+        - `role`: User's role (client, admin, or advisor)
+        
+        **What happens:**
+        1. Backend validates email/password combination
+        2. Backend generates JWT token with user ID encoded inside
+        3. Returns token + user object
+        
+        **Response includes:**
+        - `token`: JWT token (store this for future requests)
+        - `user`: Complete user object with profile details
+        
+        **Important:** Save the token and include it in all future API calls as:
+        `Authorization: Bearer <token>`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, role]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "john@example.com"
+                password:
+                  type: string
+                  example: "password123"
+                role:
+                  type: string
+                  enum: [client, admin, advisor]
+                  example: "client"
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Invalid email or password"
+  
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register new user
+      description: |
+        Creates a new user account (Client or Advisor only). Admin accounts cannot be created via this endpoint.
+        
+        **Required Parameters for ALL users:**
+        - `email`: Unique email address
+        - `password`: Minimum 6 characters
+        - `first_name`: first name
+        - `last_name`: last name
+        - `role`: Either "client" or "advisor"
+        - `phone`: Contact number in format +919876543210
+        
+        **Additional Required Parameters for Advisors:**
+        - `arn`: AMFI Registration Number (e.g., "ARN-123456")
+        
+        **What happens:**
+        1. Backend validates all input fields
+        2. Creates new user account in database
+        3. Generates JWT token with new user ID
+        4. Returns token + user object
+        
+        **Note:** The returned JWT token contains the newly created user's ID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name, role, phone]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "jane@example.com"
+                password:
+                  type: string
+                  minLength: 6
+                  example: "securePass123"
+                first_name:
+                  type: string
+                  example: "Jane "
+                last_name:
+                  type: string
+                  example: "Smith"
+                role:
+                  type: string
+                  enum: [client, advisor]
+                  example: "client"
+                phone:
+                  type: string
+                  example: "+919876543210"
+                arn:
+                  type: string
+                  description: Required if role is advisor
+                  example: "ARN-123456"
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  user:
+                    $ref: '#/components/schemas/User'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "ARN is required for advisors"
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Logout user
+      description: |
+        Logout the authenticated user and invalidate their session.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (user's JWT token)
+        
+        **What happens:**
+        1. Backend receives logout request with JWT token
+        2. Adds token to blacklist/revokes token
+        3. Clears user session
+        4. Returns confirmation
+        
+        **Client Side:** After successful logout, clear the token from localStorage/cookies.
+        
+        **Note:** Some implementations may not require server-side logout if tokens are short-lived.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Logged out successfully"
+        '401':
+          description: Unauthorized - Invalid or expired token
+
+  # MUTUAL FUNDS (6)
+  /funds:
+    get:
+      tags: [Mutual Funds]
+      summary: List all mutual funds
+      description: |
+        Returns all available mutual funds on the platform.
+        
+        **Parameters:** None required
+        
+        **Authentication:** Not required (public endpoint)
+        
+        **Returns:** Array of all mutual funds with complete details including:
+        - NAV (Net Asset Value)
+        - Returns (1Y, 3Y, 5Y)
+        - Risk rating
+        - Minimum investment amount
+        - Fund manager details
+      responses:
+        '200':
+          description: List of funds
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MutualFund'
+
+  /funds/search:
+    get:
+      tags: [Mutual Funds]
+      summary: Search and filter mutual funds
+      description: |
+        Search for mutual funds with advanced filtering and sorting options.
+        
+        **Optional Query Parameters:**
+        - `query`: Search by fund name (e.g., "HDFC")
+        - `category`: Filter by category - "Equity", "Debt", "Hybrid", "Index", "Sectoral"
+        - `riskRating`: Filter by risk - "Low", "Moderate", "High", "Very High"
+        - `minInvestment`: Maximum minimum investment amount (e.g., 5000)
+        - `sortBy`: Sort by field - "returns1Y", "returns3Y", "returns5Y", "nav", "name" (default: "returns1Y")
+        - `sortOrder`: "asc" or "desc" (default: "desc")
+        - `limit`: Number of results (default: 20)
+        
+        **Use Cases:**
+        - User dashboard: Search for funds by name
+        - Risk-based filtering: Show only Low risk funds
+        - Category browsing: Show all Equity funds
+        - Top performers: Sort by returns
+        
+        **Authentication:** Not required (public endpoint)
+      parameters:
+        - in: query
+          name: query
+          schema:
+            type: string
+          example: "HDFC"
+          description: Search by fund name
+        - in: query
+          name: category
+          schema:
+            type: string
+            enum: [Equity, Debt, Hybrid, Index, Sectoral]
+          example: "Equity"
+        - in: query
+          name: riskRating
+          schema:
+            type: string
+            enum: [Low, Moderate, High, Very High]
+          example: "Moderate"
+        - in: query
+          name: minInvestment
+          schema:
+            type: integer
+          example: 5000
+          description: Maximum minimum investment (show funds requiring <= this amount)
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum: [returns1Y, returns3Y, returns5Y, nav, name]
+            default: returns1Y
+        - in: query
+          name: sortOrder
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Filtered and sorted funds
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  funds:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MutualFund'
+                  total:
+                    type: integer
+                    example: 45
+                    description: Total number of funds matching filters
+
+  /funds/{id}:
+    get:
+      tags: [Mutual Funds]
+      summary: Get mutual fund details
+      description: |
+        Returns detailed information about a specific mutual fund.
+        
+        **Required Parameters:**
+        - `id` (path parameter): Fund ID (e.g., "fund001")
+        
+        **Authentication:** Not required (public endpoint)
+        
+        **Returns:** Complete fund details including performance metrics, manager info, and risk analysis.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: "fund001"
+      responses:
+        '200':
+          description: Fund details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MutualFund'
+        '404':
+          description: Fund not found
+
+
+
+  /funds/top-performers:
+    get:
+      tags: [Mutual Funds]
+      summary: Get top performing funds
+      description: Returns funds with highest returns
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+          example: 5
+      responses:
+        '200':
+          description: Top funds list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MutualFund'
+
+  /funds/{id}/historical-nav:
+    get:
+      tags: [Mutual Funds]
+      summary: Get historical NAV data for a fund
+      description: Returns historical Net Asset Value for charting
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: "fund001"
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [1M, 3M, 6M, 1Y, 3Y, 5Y]
+            default: "1Y"
+          example: "6M"
+      responses:
+        '200':
+          description: Historical data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date:
+                      type: string
+                      format: date
+                      example: "2024-01-15"
+                    nav:
+                      type: number
+                      example: 152.45
+
+  # USER MANAGEMENT (6)
+  /users/profile:
+    get:
+      tags: [User Management]
+      summary: Get current user profile
+      description: |
+        Returns the profile of the authenticated user. 
+        **User Identification**: The user ID is automatically extracted from the JWT token in the Authorization header.
+        No user ID needs to be passed in the request.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    patch:
+      tags: [User Management]
+      summary: Update user profile
+      description: |
+        Update user details including personal and financial information.
+        
+        **🔑 HOW THE BACKEND KNOWS WHICH USER TO UPDATE:**
+        
+        When you login, the JWT token is created like this:
+        ```
+        JWT Token = {
+          "userId": "user123",    ← User ID is encoded in the token
+          "email": "john@example.com",
+          "role": "client",
+          "exp": 1234567890
+        }
+        ```
+        
+        When you send PATCH /users/profile request:
+        ```
+        PATCH /users/profile
+        Headers:
+          Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        Body:
+          {
+            "name": "John Updated",
+            "phone": "+919999999999"
+          }
+        ```
+        
+        **Backend Process:**
+        1.  Receives the request with Authorization header
+        2.  Decodes the JWT token
+        3.  Extracts `userId: "user123"` from the decoded token
+        4.  Runs: `UPDATE users SET name='John Updated' WHERE id='user123'`
+        5.  Returns updated user profile
+        
+        **No user ID parameter needed!** The token already contains it.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (contains user ID)
+        
+        **Request Body Parameters (all optional):**
+        - `name`: Updated name
+        - `phone`: Updated phone number
+        - `pan`: PAN card number
+        - `dateOfBirth`: Date of birth
+        - `annualIncome`: Income range
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "John Updated"
+                phone:
+                  type: string
+                  example: "+919999999999"
+                pan:
+                  type: string
+                  example: "ABCDE1234F"
+                dateOfBirth:
+                  type: string
+                  format: date
+                  example: "1990-05-15"
+                annualIncome:
+                  type: string
+                  description: Annual income range
+                  example: "5-10 Lakhs"
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /users/risk-profile:
+    post:
+      tags: [User Management]
+      summary: Submit risk profile assessment
+      description: |
+        Submit user's risk assessment questionnaire answers to calculate and update risk profile.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (user ID extracted from token)
+        
+        **Required Body Parameters:**
+        - `answers`: Object containing answers to 5 risk questions
+          - `q1`: Emergency fund status (1-3 points)
+          - `q2`: Investment duration (1-4 points)
+          - `q3`: Market loss reaction (1-4 points)
+          - `q4`: Return expectation (1-4 points)
+          - `q5`: Investment experience (1-4 points)
+        
+        **What happens:**
+        1. Extracts user ID from JWT token
+        2. Validates all 5 questions are answered
+        3. Fetches user's age (from DOB) and income for auto-scoring
+        4. Calculates total risk score (questions + age + income)
+        5. Maps to risk profile: Low (0-35%), Moderate (36-65%), High (66-95%), Very High (96-100%)
+        6. Updates user's profile with riskProfile and riskScore
+        7. Returns calculated risk profile
+        
+        **Note:** User must have DOB and annual income set before submitting.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers:
+                  type: object
+                  required: [q1, q2, q3, q4, q5]
+                  properties:
+                    q1:
+                      type: integer
+                      minimum: 1
+                      maximum: 3
+                      example: 3
+                    q2:
+                      type: integer
+                      minimum: 1
+                      maximum: 4
+                      example: 4
+                    q3:
+                      type: integer
+                      minimum: 1
+                      maximum: 4
+                      example: 3
+                    q4:
+                      type: integer
+                      minimum: 1
+                      maximum: 4
+                      example: 2
+                    q5:
+                      type: integer
+                      minimum: 1
+                      maximum: 4
+                      example: 2
+      responses:
+        '200':
+          description: Risk profile calculated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  riskProfile:
+                    type: string
+                    enum: [Low, Moderate, High, Very High]
+                    example: "Moderate"
+                  riskScore:
+                    type: number
+                    example: 0.54
+        '400':
+          description: Missing DOB or income
+
+  /users/recommendations:
+    get:
+      tags: [User Management]
+      summary: Get personalized fund recommendations
+      description: |
+        AI-powered fund recommendation engine that suggests suitable mutual funds based on investment criteria.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (user ID extracted from token)
+        
+        **Required Query Parameters:**
+        - `amount`: Investment amount in rupees (e.g., 10000)
+        - `duration`: Investment duration in years (e.g., 3, 5, 10)
+        - `riskProfile`: Risk tolerance - "Low", "Moderate", "High", "Very High"
+        
+        **Optional Query Parameters:**
+        - `limit`: Number of recommendations (default: 5, max: 10)
+        
+        **Business Logic for Recommendations:**
+        
+        1. **Risk Profile Matching:**
+           - Low → Debt funds, Index funds (stable, low volatility)
+           - Moderate → Hybrid funds, Large-cap equity (balanced)
+           - High → Equity funds, Mid-cap (growth-oriented)
+           - Very High → Sectoral funds, Small-cap (aggressive)
+        
+        2. **Duration-based Category Selection:**
+           - < 1 year → Debt funds only (capital preservation)
+           - 1-3 years → Hybrid, Debt, Index funds (moderate growth)
+           - 3-5 years → Large-cap equity, Hybrid (balanced growth)
+           - > 5 years → All equity categories (maximum growth potential)
+        
+        3. **Amount Validation:**
+           - Filter funds where `minInvestment <= amount`
+           - Prioritize funds with lower expense ratios for smaller amounts
+        
+        4. **Scoring Algorithm:**
+           - Historical returns match (30% weight)
+           - Risk rating alignment (25% weight)
+           - Expense ratio optimization (20% weight)
+           - AUM size (stability) (15% weight)
+           - Fund manager experience (10% weight)
+        
+        5. **Diversification:**
+           - Recommend mix of categories (e.g., 60% equity, 40% debt for Moderate)
+           - Different fund houses to reduce concentration risk
+        
+        **Example Use Case:**
+        ```
+        Amount: ₹50,000
+        Duration: 5 years
+        Risk: Moderate
+        
+        → Recommends:
+          1. HDFC Balanced Advantage Fund (Hybrid) - ₹20,000
+          2. ICICI Pru Bluechip Fund (Large-cap Equity) - ₹20,000
+          3. SBI Magnum Gilt Fund (Debt) - ₹10,000
+        ```
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: amount
+          required: true
+          schema:
+            type: number
+          example: 50000
+          description: Investment amount in rupees
+        - in: query
+          name: duration
+          required: true
+          schema:
+            type: number
+          example: 5
+          description: Investment duration in years
+        - in: query
+          name: riskProfile
+          required: true
+          schema:
+            type: string
+            enum: [Low, Moderate, High, Very High]
+          example: "Moderate"
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 5
+            maximum: 10
+          example: 5
+      responses:
+        '200':
+          description: Personalized fund recommendations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recommendations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        fund:
+                          $ref: '#/components/schemas/MutualFund'
+                        suggestedAllocation:
+                          type: number
+                          example: 20000
+                          description: Recommended investment amount in this fund
+                        allocationPercentage:
+                          type: number
+                          example: 40
+                          description: Percentage of total amount
+                        matchScore:
+                          type: number
+                          example: 92
+                          description: How well the fund matches criteria (0-100)
+                        reason:
+                          type: string
+                          example: "Strong 5-year returns (18.2%) with moderate risk, ideal for balanced portfolios"
+                  summary:
+                    type: object
+                    properties:
+                      totalAmount:
+                        type: number
+                        example: 50000
+                      expectedReturn:
+                        type: string
+                        example: "12-15% annually"
+                      diversification:
+                        type: object
+                        properties:
+                          equity:
+                            type: number
+                            example: 60
+                          debt:
+                            type: number
+                            example: 30
+                          hybrid:
+                            type: number
+                            example: 10
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Amount must be at least ₹500"
+
+  /users/advisor-recommendations:
+    get:
+      tags: [User Management]
+      summary: View recommendations sent by advisor
+      description: |
+        View fund recommendations sent by your assigned advisor.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (user ID extracted from token)
+        
+        **Optional Query Parameters:**
+        - `status`: Filter - "pending", "accepted", "rejected", "all" (default: "all")
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, accepted, rejected, all]
+            default: all
+      responses:
+        '200':
+          description: Advisor recommendations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      example: "rec123"
+                    fundId:
+                      type: string
+                      example: "fund001"
+                    fundName:
+                      type: string
+                      example: "HDFC Equity Fund"
+                    advisorName:
+                      type: string
+                      example: "Rajesh Kumar"
+                    notes:
+                      type: string
+                      example: "This fund aligns with your moderate risk profile"
+                    recommendedAmount:
+                      type: number
+                      example: 10000
+                    status:
+                      type: string
+                      example: "pending"
+                    createdAt:
+                      type: string
+                      format: date-time
+
+  /users/password:
+    patch:
+      tags: [User Management]
+      summary: Change user password
+      description: Update password for the authenticated user. User is identified by JWT token, no ID needed in request.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword:
+                  type: string
+                  example: "oldPassword123"
+                newPassword:
+                  type: string
+                  minLength: 6
+                  example: "newSecurePass456"
+      responses:
+        '200':
+          description: Password updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Password updated successfully"
+        '400':
+          description: Invalid current password
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Current password is incorrect"
+
+  # PORTFOLIO (3)
+  /users/portfolio:
+    get:
+      tags: [Portfolio]
+      summary: Get user portfolio
+      description: |
+        Returns the portfolio of the authenticated user.
+        **User Identification**: The user ID is automatically extracted from the JWT token.
+        The backend uses this ID to fetch the correct user's portfolio data.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User portfolio
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalInvestment:
+                    type: number
+                    example: 50000
+                  currentValue:
+                    type: number
+                    example: 54200
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PortfolioItem'
+
+  /users/portfolio/invest:
+    post:
+      tags: [Portfolio]
+      summary: Invest in a fund
+      description: |
+        Creates a new investment in a mutual fund for the authenticated user.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (user ID extracted from token)
+        
+        **Required Body Parameters:**
+        - `fundId`: ID of the fund to invest in (e.g., "fund001")
+        - `amount`: Investment amount in rupees (e.g., 10000)
+        
+        **What happens:**
+        1. Backend extracts user ID from JWT token
+        2. Validates fund exists and amount meets minimum investment
+        3. Calculates units based on current NAV
+        4. Creates transaction record
+        5. Updates user's portfolio
+        
+        **Returns:**
+        - Transaction ID for tracking
+        - Number of units purchased
+        - Success message
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fundId, amount]
+              properties:
+                fundId:
+                  type: string
+                  example: "fund001"
+                amount:
+                  type: number
+                  example: 10000
+      responses:
+        '200':
+          description: Investment successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Investment successful"
+                  transactionId:
+                    type: string
+                    example: "txn123"
+                  units:
+                    type: number
+                    example: 65.6
+
+
+
+  # UTILITIES (2)
+  /users/transactions:
+    get:
+      tags: [Utilities]
+      summary: Get transaction history
+      description: |
+        Returns transaction history for the authenticated user.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (user ID extracted from token)
+        
+        **Optional Query Parameters:**
+        - `limit`: Number of transactions to return (default: 20)
+        - `type`: Filter by transaction type - "INVEST", "REDEEM", or "ALL" (default: "ALL")
+        
+        **What happens:**
+        1. Backend extracts user ID from JWT token
+        2. Fetches transactions for that specific user
+        3. Applies filters if specified
+        4. Returns sorted list (newest first)
+        
+        **Returns:** Array of transactions with fund name, amount, date, and status.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+          example: 10
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [INVEST, REDEEM, ALL]
+            default: ALL
+      responses:
+        '200':
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+
+  /users/notifications:
+    get:
+      tags: [Utilities]
+      summary: Get user notifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: unreadOnly
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: List of notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+
+  # ADMIN (10)
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List all users
+      description: |
+        Admin only - Returns all registered users (clients, advisors, or all).
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (admin role required)
+        
+        **Optional Query Parameters:**
+        - `role`: Filter by role - "client", "advisor", "admin", or "all" (default: "all")
+        
+        **What happens:**
+        1. Backend extracts user ID from JWT and verifies admin role
+        2. Fetches users based on role filter
+        3. Returns complete user list
+        
+        **Returns:** Array of users with all profile details.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [client, advisor, admin, all]
+            default: all
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '403':
+          description: Forbidden - Admin only
+    post:
+      tags: [Admin]
+      summary: Create new user (client or advisor)
+      description: |
+        Admin only - Create a new client or advisor account.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (admin role required)
+        
+        **Required Body Parameters:**
+        - `email`: Unique email address
+        - `password`: User's password
+        - `name`: Full name
+        - `role`: Either "client" or "advisor"
+        - `phone`: Contact number
+        
+        **Additional for Advisors:**
+        - `arn`: AMFI Registration Number
+        
+        **What happens:**
+        1. Verifies admin role from JWT
+        2. Validates all input fields
+        3. Creates new user account
+        4. Returns created user details
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name, role, phone]
+              properties:
+                email:
+                  type: string
+                  example: "newclient@example.com"
+                password:
+                  type: string
+                  example: "securePass123"
+                name:
+                  type: string
+                  example: "New Client"
+                role:
+                  type: string
+                  enum: [client, advisor]
+                  example: "client"
+                phone:
+                  type: string
+                  example: "+919876543210"
+                arn:
+                  type: string
+                  description: Required if role is advisor
+                  example: "ARN-789012"
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User created successfully"
+                  userId:
+                    type: string
+                    example: "user456"
+                  user:
+                    $ref: '#/components/schemas/User'
+        '403':
+          description: Forbidden - Admin only
+
+  /admin/users/{id}:
+    delete:
+      tags: [Admin]
+      summary: Remove a user (client or advisor)
+      description: |
+        Admin only - Delete a user account from the system.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (admin role required)
+        
+        **Required Path Parameters:**
+        - `id`: User ID to delete (e.g., "user123")
+        
+        **What happens:**
+        1. Verifies admin role from JWT
+        2. Validates user exists
+        3. Removes user and associated data
+        4. Returns confirmation
+        
+        **Warning:** This action is irreversible!
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: "user123"
+      responses:
+        '200':
+          description: User deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User deleted successfully"
+        '403':
+          description: Forbidden - Admin only
+        '404':
+          description: User not found
+
+  /admin/funds:
+    get:
+      tags: [Admin]
+      summary: List all funds (admin view)
+      description: |
+        Admin only - Returns all mutual funds with management details.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (admin role required)
+        
+        **Returns:** Complete list of funds with admin-level details.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of all funds
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MutualFund'
+        '403':
+          description: Forbidden - Admin only
+    post:
+      tags: [Admin]
+      summary: Create a new mutual fund
+      description: |
+        Admin only - Add a new mutual fund to the platform.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (admin role required)
+        
+        **Required Body Parameters:**
+        - Complete fund details (name, category, NAV, returns, etc.)
+        
+        **What happens:**
+        1. Verifies admin role from JWT
+        2. Validates fund data
+        3. Creates new fund in database
+        4. Returns created fund details
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MutualFund'
+      responses:
+        '201':
+          description: Fund created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Fund created successfully"
+                  fundId:
+                    type: string
+                    example: "fund123"
+        '403':
+          description: Forbidden - Admin only
+
+  /admin/funds/{id}:
+    delete:
+      tags: [Admin]
+      summary: Remove a mutual fund
+      description: |
+        Admin only - Delete a mutual fund from the platform.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (admin role required)
+        
+        **Required Path Parameters:**
+        - `id`: Fund ID to delete (e.g., "fund001")
+        
+        **What happens:**
+        1. Verifies admin role from JWT
+        2. Validates fund exists
+        3. Checks if fund has active investments
+        4. Removes fund if no dependencies
+        5. Returns confirmation
+        
+        **Warning:** Cannot delete funds with active investments!
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: "fund001"
+      responses:
+        '200':
+          description: Fund deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Fund deleted successfully"
+        '400':
+          description: Cannot delete - fund has active investments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Cannot delete fund with active investments"
+        '403':
+          description: Forbidden - Admin only
+        '404':
+          description: Fund not found
+
+ 
+
+  # ADVISOR (6)
+  /advisor/clients:
+    get:
+      tags: [Advisor]
+      summary: List and search assigned clients
+      description: |
+        Returns list of clients assigned to the authenticated advisor with optional search.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (advisor ID extracted from token)
+        
+        **Optional Query Parameters:**
+        - `search`: Search by client name or email (e.g., "john" or "john@example.com")
+        - `sortBy`: Sort by field - "name", "totalInvestment", "currentValue" (default: "name")
+        - `limit`: Number of results to return (default: 50)
+        
+        **Authorization:** Advisor role only
+        
+        **What happens:**
+        1. Backend extracts advisor ID from JWT token
+        2. Verifies user has advisor role
+        3. Fetches all clients assigned to this advisor
+        4. Applies search filter if provided (case-insensitive)
+        5. Sorts and returns filtered client list
+        
+        **Returns:** Array of clients with their investment totals and current portfolio values.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+          example: "john"
+          description: Search by client name or email
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum: [name, totalInvestment, currentValue]
+            default: name
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: List of clients (filtered if search applied)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      example: "client123"
+                    name:
+                      type: string
+                      example: "John Smith"
+                    email:
+                      type: string
+                      example: "john@example.com"
+                    totalInvestment:
+                      type: number
+                      example: 50000
+                    currentValue:
+                      type: number
+                      example: 54200
+        '403':
+          description: Forbidden - Advisor only
+
+  /advisor/clients/{id}/portfolio:
+    get:
+      tags: [Advisor]
+      summary: View client's complete portfolio
+      description: |
+        View complete portfolio details of an assigned client including all investments.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (advisor ID extracted from token)
+        
+        **Required Path Parameters:**
+        - `id`: Client's user ID (e.g., "client123")
+        
+        **Authorization:** Advisor role only. Can only view assigned clients.
+        
+        **What happens:**
+        1. Extracts advisor ID from JWT token
+        2. Verifies client is assigned to this advisor
+        3. Fetches complete portfolio with all fund holdings
+        4. Returns detailed breakdown
+        
+        **Returns:** Complete portfolio with individual fund holdings, invested amounts, and current values.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: "client123"
+      responses:
+        '200':
+          description: Client portfolio
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientId:
+                    type: string
+                    example: "client123"
+                  clientName:
+                    type: string
+                    example: "John Smith"
+                  totalInvestment:
+                    type: number
+                    example: 50000
+                  currentValue:
+                    type: number
+                    example: 54200
+                  totalReturns:
+                    type: number
+                    example: 4200
+                  returnsPercentage:
+                    type: number
+                    example: 8.4
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PortfolioItem'
+        '403':
+          description: Forbidden - Not your client or not an advisor
+        '404':
+          description: Client not found
+
+  /advisor/clients/{id}/funds:
+    get:
+      tags: [Advisor]
+      summary: View client's fund holdings only
+      description: |
+        Returns just the fund holdings (without full portfolio calculations) for a client.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (advisor ID extracted from token)
+        
+        **Required Path Parameters:**
+        - `id`: Client's user ID (e.g., "client123")
+        
+        **Authorization:** Advisor role only
+        
+        **What happens:**
+        1. Extracts advisor ID from JWT
+        2. Verifies client assignment
+        3. Fetches list of funds client has invested in
+        4. Returns fund details with units and values
+        
+        **Returns:** Simplified list of client's fund holdings.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: "client123"
+      responses:
+        '200':
+          description: Client's fund holdings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientId:
+                    type: string
+                    example: "client123"
+                  clientName:
+                    type: string
+                    example: "John Smith"
+                  funds:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        fundId:
+                          type: string
+                          example: "fund001"
+                        fundName:
+                          type: string
+                          example: "HDFC Equity Fund"
+                        category:
+                          type: string
+                          example: "Equity"
+                        units:
+                          type: number
+                          example: 100.5
+                        currentNAV:
+                          type: number
+                          example: 152.45
+                        investedAmount:
+                          type: number
+                          example: 15000
+                        currentValue:
+                          type: number
+                          example: 15320
+        '403':
+          description: Forbidden - Not your client
+        '404':
+          description: Client not found
+
+  /advisor/clients/{id}/allocate-fund:
+    post:
+      tags: [Advisor]
+      summary: Allocate/distribute fund investment for client
+      description: |
+        Advisor initiates a fund allocation for their client. This creates an investment on behalf of the client.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (advisor ID extracted from token)
+        
+        **Required Path Parameters:**
+        - `id`: Client's user ID (e.g., "client123")
+        
+        **Required Body Parameters:**
+        - `fundId`: Fund to invest in (e.g., "fund001")
+        - `amount`: Investment amount in rupees (e.g., 10000)
+        - `notes`: Advisor notes/justification for this allocation
+        
+        **Authorization:** Advisor role only
+        
+        **What happens:**
+        1. Extracts advisor ID from JWT
+        2. Verifies client is assigned to this advisor
+        3. Validates fund and amount
+        4. Creates investment for the client
+        5. Logs allocation with advisor notes
+        6. Returns transaction details
+        
+        **Note:** This action invests on behalf of the client, so proper authorization must be obtained offline.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: "client123"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fundId, amount, notes]
+              properties:
+                fundId:
+                  type: string
+                  example: "fund001"
+                amount:
+                  type: number
+                  example: 10000
+                notes:
+                  type: string
+                  example: "Recommended based on client's moderate risk profile and long-term goals"
+      responses:
+        '200':
+          description: Fund allocated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Fund allocated successfully"
+                  transactionId:
+                    type: string
+                    example: "txn789"
+                  units:
+                    type: number
+                    example: 65.6
+                  clientId:
+                    type: string
+                    example: "client123"
+                  advisorId:
+                    type: string
+                    example: "advisor456"
+        '403':
+          description: Forbidden - Not your client or insufficient permissions
+        '404':
+          description: Client or fund not found
+
+  /advisor/recommendations:
+    post:
+      tags: [Advisor]
+      summary: Send fund recommendation to client
+      description: |
+        Send a fund recommendation notification to a client without making an actual investment.
+        
+        **Required Headers:**
+        - `Authorization: Bearer <token>` (advisor ID extracted from token)
+        
+        **Required Body Parameters:**
+        - `clientId`: Client to send recommendation to
+        - `fundId`: Fund being recommended
+        - `notes`: Recommendation explanation
+        
+        **What happens:**
+        1. Extracts advisor ID from JWT
+        2. Verifies client is assigned to this advisor
+        3. Creates recommendation record
+        4. Sends notification to client
+        5. Returns confirmation
+        
+        **Note:** This only sends a recommendation, not an actual investment.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId, fundId, notes]
+              properties:
+                clientId:
+                  type: string
+                  example: "client123"
+                fundId:
+                  type: string
+                  example: "fund001"
+                notes:
+                  type: string
+                  example: "This fund aligns with your risk profile and investment goals"
+                recommendedAmount:
+                  type: number
+                  description: Optional suggested investment amount
+                  example: 10000
+      responses:
+        '200':
+          description: Recommendation sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Recommendation sent successfully"
+                  recommendationId:
+                    type: string
+                    example: "rec456"
+        '403':
+          description: Forbidden - Not your client
+
+  # ANALYTICS (3)
+  /analytics/summary:
+    get:
+      tags: [Analytics]
+      summary: Get portfolio summary analytics
+      description: Returns aggregate portfolio statistics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Summary stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsSummary'
+
+  /analytics/performance:
+    get:
+      tags: [Analytics]
+      summary: Get performance chart data
+      description: Returns time-series data for portfolio value
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: period
+          schema:
+            type: string
+            enum: [1M, 3M, 6M, 1Y]
+            default: "6M"
+      responses:
+        '200':
+          description: Chart data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PerformanceData'
+
+  /analytics/asset-allocation:
+    get:
+      tags: [Analytics]
+      summary: Get asset allocation details
+      description: Returns breakdown by asset category
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Asset allocation data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetAllocation'
+
